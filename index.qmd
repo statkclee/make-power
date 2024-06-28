@@ -2,9 +2,26 @@
 title: "태양렬 발전량 예측 자동화"
 format: html
 editor: visual
+lightbox: true
 editor_options: 
   chunk_output_type: console
 ---
+
+::: callout-warning
+### `targets` 재현가능 논문작성
+
+-   [웹사이트](https://carpentries-incubator.github.io/targets-workshop/)
+-   [GitHub 저장소](https://github.com/joelnitta/targets-workshop)
+:::
+
+::: callout-note
+### 태양열 발전
+
+- [탄소중립 신재생에너지 메이커 활동](https://tidyverse-korea.github.io/renewable/)
+
+![](images/poster.jpg){fig-align="center" width="248"}
+
+:::
 
 # 작업흐름
 
@@ -22,7 +39,7 @@ flowchart TB
 
 # 프로젝트 구조
 
-```sh
+``` sh
 project_root/
 │
 ├── Makefile
@@ -40,29 +57,27 @@ project_root/
 
 # Makefile
 
-
-```makefile
+``` makefile
 .PHONY: all clean create_dirs
 
 all: send_email
 
 output/weather_data.csv output/temperature.csv: scripts/get_temperature.R
-	Rscript scripts/get_temperature.R
+    Rscript scripts/get_temperature.R
 
 output/prediction_result.csv: scripts/predict_solar.R output/weather_data.csv output/temperature.csv
-	Rscript scripts/predict_solar.R
+    Rscript scripts/predict_solar.R
 
 send_email: scripts/send_email.R output/prediction_result.csv
-	Rscript scripts/send_email.R
+    Rscript scripts/send_email.R
 
 clean:
-	rm -f output/weather_data.csv output/temperature.csv output/prediction_result.csv
+    rm -f output/weather_data.csv output/temperature.csv output/prediction_result.csv
 ```
-
 
 # 실행결과
 
-```sh
+``` sh
 $ make all
 Rscript scripts/get_temperature.R
 Rscript scripts/get_temperature.R
