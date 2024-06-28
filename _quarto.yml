@@ -6,7 +6,7 @@ lang: ko-kr
 date-format: "YYYY년 MM월 DD일"
 
 website:
-  title: "지바대 사전 워크샵 - `target`"
+  title: "지바대 사전 워크샵"
   favicon: "images/chiba.webp"
   google-analytics: "UA-229551680-1"
   navbar:
