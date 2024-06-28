@@ -1,0 +1,265 @@
+---
+title: "기계학습"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+  eval: false 
+---
+
+# 데이터셋
+
+[Solar Power Generation Data](https://www.kaggle.com/datasets/anikannal/solar-power-generation-data) 데이터셋은 인도 내 두 지역에서의 태양광 발전량 데이터를 포함하고 있습니다. 데이터는 날씨 조건 및 발전량을 일별로 기록하며, 주어진 기간 동안의 태양광 발전의 효율성을 분석하는 데 사용될 수 있습니다.
+
+**데이터 스키마**
+
+| 칼럼명                  | 자료형   | 설명                              |
+|-------------------------|----------|-----------------------------------|
+| PLANT_ID                | String   | 발전소의 고유 ID                  |
+| SOURCE_KEY              | String   | 특정 발전기 또는 인버터의 고유 ID |
+| DATE_TIME               | DateTime | 날짜 및 시간 정보                 |
+| DC_POWER                | Float    | 직류(DC) 전력 (kW)                |
+| AC_POWER                | Float    | 교류(AC) 전력 (kW)                |
+| DAILY_YIELD             | Float    | 일일 에너지 생성량 (kWh)          |
+| TOTAL_YIELD             | Float    | 총 에너지 생성량 (kWh)            |
+| **AMBIENT_TEMPERATURE** | Float    | **주변 온도 (°C)**                |
+| MODULE_TEMPERATURE      | Float    | 모듈 온도 (°C)                    |
+| IRRADIATION             | Float    | 태양 복사 강도 (W/m²)             |
+
+# 기계학습
+
+## ML 예측모형
+
+```{r}
+# 필요한 라이브러리 로드
+library(tidyverse)
+library(lubridate)
+library(tidymodels)
+
+# 데이터 로드
+plant_1_generation <- read_csv("data/Plant_1_Generation_Data.csv")
+plant_1_weather <- read_csv("data/Plant_1_Weather_Sensor_Data.csv")
+
+# 날짜 형식 변환 및 일자별 집계
+plant_1_generation_daily <- plant_1_generation %>%
+  mutate(DATE = dmy_hm(DATE_TIME)) %>%
+  group_by(DATE = as.Date(DATE)) %>%
+  summarise(
+    DAILY_YIELD = sum(DAILY_YIELD),
+    TOTAL_YIELD = max(TOTAL_YIELD),
+    DC_POWER = mean(DC_POWER),
+    AC_POWER = mean(AC_POWER)
+  )
+
+plant_1_weather_daily <- plant_1_weather %>%
+  group_by(DATE = as.Date(DATE_TIME)) %>%
+  summarise(
+    AMBIENT_TEMPERATURE = mean(AMBIENT_TEMPERATURE),
+    MODULE_TEMPERATURE = mean(MODULE_TEMPERATURE),
+    IRRADIATION = sum(IRRADIATION)  # 일일 총 일사량
+  )
+
+# 데이터 결합
+plant_1_combined <- plant_1_generation_daily %>%
+  inner_join(plant_1_weather_daily, by = "DATE") %>%
+  mutate(
+    DAY = day(DATE),
+    MONTH = month(DATE),
+    DAY_OF_WEEK = wday(DATE)
+  )
+
+# 결측치 처리
+plant_1_combined <- na.omit(plant_1_combined)
+
+# 변수 정의
+weather_features <- c("AMBIENT_TEMPERATURE", "MODULE_TEMPERATURE", "IRRADIATION")
+time_features <- c("DAY", "MONTH", "DAY_OF_WEEK")
+target <- "DAILY_YIELD"
+
+# 데이터 분할
+set.seed(123)
+data_split <- initial_split(plant_1_combined, prop = 0.7, strata = DAILY_YIELD)
+train_data <- training(data_split)
+test_data <- testing(data_split)
+
+print(paste("단순 분할 - 훈련 데이터 크기:", nrow(train_data)))
+print(paste("단순 분할 - 테스트 데이터 크기:", nrow(test_data)))
+
+# 레시피 정의
+solar_recipe <- recipe(DAILY_YIELD ~ ., data = train_data) %>%
+  step_rm(DATE, TOTAL_YIELD) %>%
+  step_normalize(all_predictors()) %>%
+  step_zv(all_predictors())
+
+# 모델 정의 (Random Forest)
+rf_model <- rand_forest(mtry = tune(), min_n = tune(), trees = 500) %>%
+  set_engine("ranger", importance = "permutation") %>%
+  set_mode("regression")
+
+# 워크플로우 정의
+solar_workflow <- workflow() %>%
+  add_recipe(solar_recipe) %>%
+  add_model(rf_model)
+
+# 교차 검증 폴드 정의
+cv_folds <- vfold_cv(train_data, v = 5)
+
+# 하이퍼파라미터 튜닝
+tuning_results <- tune_grid(
+  solar_workflow,
+  resamples = cv_folds,
+  grid = 20
+)
+
+# 최적 하이퍼파라미터 선택
+best_params <- select_best(tuning_results, "rmse")
+
+# 최종 워크플로우 구성
+final_workflow <- solar_workflow %>%
+  finalize_workflow(best_params)
+
+# 최종 모델 학습
+final_model <- fit(final_workflow, data = train_data)
+
+# 테스트 데이터에 대한 예측
+predictions <- predict(final_model, new_data = test_data)
+results <- test_data %>%
+  select(DAILY_YIELD) %>%
+  bind_cols(predictions)
+
+# 모델 성능 평가
+metrics <- metric_set(rmse, rsq, mae)
+model_performance <- metrics(results, truth = DAILY_YIELD, estimate = .pred)
+print(model_performance)
+
+# 변수 중요도 계산
+importance <- final_model %>%
+  extract_fit_parsnip() %>%
+  vip::vip(num_features = 10)
+
+# 변수 중요도 시각화
+importance_plot <- importance +
+  geom_col(aes(fill = Variable %in% weather_features)) +
+  scale_fill_manual(values = c("grey", "red"), 
+                    labels = c("Time Features", "Weather Features")) +
+  labs(fill = "Feature Type") +
+  theme_minimal() +
+  labs(title = "Top 10 Variable Importance (Weather variables in red)")
+
+print(importance_plot)
+
+# 실제값 vs 예측값 산점도
+prediction_plot <- ggplot(results, aes(x = DAILY_YIELD, y = .pred)) +
+  geom_point(alpha = 0.3) +
+  geom_abline(color = "red", linetype = "dashed") +
+  labs(x = "Actual Daily Yield", y = "Predicted Daily Yield", 
+       title = "Actual vs Predicted Daily Yield") +
+  theme_minimal()
+
+print(prediction_plot)
+
+# 날씨 변수와 발전량의 관계 시각화
+weather_plots <- map(weather_features, function(feature) {
+  ggplot(train_data, aes_string(x = feature, y = target)) +
+    geom_point(alpha = 0.1) +
+    geom_smooth(method = "lm", color = "red") +
+    labs(title = paste(feature, "vs", target)) +
+    theme_minimal()
+})
+
+print(weather_plots)
+
+# 모델 저장
+saveRDS(final_model, "data/solar_power_prediction_model.rds")
+```
+
+## 단순 회귀모형
+
+```{r}
+plant_1_combined |> 
+  ggplot(aes(x = AMBIENT_TEMPERATURE, y = IRRADIATION)) +
+    geom_point() +
+    geom_smooth(method = "lm", color = "red") 
+```
+
+```{r}
+# 데이터 분할 (시계열 특성을 고려하여 날짜 순으로 분할)
+plant_1_combined <- plant_1_combined %>% 
+  arrange(DATE)
+
+train_data <- plant_1_combined %>% slice(1:round(0.7 * nrow(plant_1_combined)))
+test_data <- plant_1_combined %>% slice((round(0.7 * nrow(plant_1_combined)) + 1):nrow(plant_1_combined))
+
+# 단순 선형 회귀 모델 생성
+simple_model <- lm(DAILY_YIELD ~ AMBIENT_TEMPERATURE, data = train_data)
+
+# 모델 요약
+summary(simple_model)
+
+# 테스트 데이터에 대한 예측
+predictions <- predict(simple_model, newdata = test_data)
+
+# 모델 성능 평가
+rmse <- sqrt(mean((test_data$DAILY_YIELD - predictions)^2))
+r_squared <- cor(test_data$DAILY_YIELD, predictions)^2
+
+cat("RMSE:", rmse, "\n")
+cat("R-squared:", r_squared, "\n")
+
+# 실제값 vs 예측값 산점도
+ggplot(data = test_data, aes(x = DAILY_YIELD, y = predictions)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+  labs(x = "Actual Daily Yield", y = "Predicted Daily Yield",
+       title = "Actual vs Predicted Daily Yield") +
+  theme_minimal()
+
+# AMBIENT_TEMPERATURE와 DAILY_YIELD의 관계 시각화
+ggplot(data = plant_1_combined, aes(x = AMBIENT_TEMPERATURE, y = DAILY_YIELD)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red") +
+  labs(x = "Ambient Temperature", y = "Daily Yield",
+       title = "Ambient Temperature vs Daily Yield") +
+  theme_minimal()
+
+# 모델 저장
+saveRDS(simple_model, "data/simple_solar_prediction_model.rds")
+```
+
+# 생산량 예측
+
+```{r}
+#| eval: true
+# 필요한 라이브러리 로드
+library(tidyverse)
+
+# 저장된 모델 불러오기
+simple_model <- readRDS(str_glue("{here::here()}/data/simple_solar_prediction_model.rds"))
+
+# 온도를 입력받아 일일 생산량을 예측하는 함수
+predict_yield <- function(temperature) {
+  new_data <- data.frame(AMBIENT_TEMPERATURE = temperature)
+  predicted <- predict(simple_model, newdata = new_data)
+  return(predicted)
+}
+
+# 사용자로부터 온도 입력 받기
+cat("예상 기온을 입력하세요 (°C): ")
+user_temperature <- 30
+
+predicted_yield <- predict_yield(user_temperature)
+  
+# 결과 출력
+  cat(sprintf("예상 기온이 %.1f°C일 때, 예측되는 일일 생산량은 %.2f입니다.\n", 
+              user_temperature, predicted_yield))
+  
+# 신뢰 구간 계산 (선택적)
+new_data <- data.frame(AMBIENT_TEMPERATURE = user_temperature)
+prediction_interval <- predict(simple_model, newdata = new_data, interval = "prediction")
+  
+cat(sprintf("95%% 예측 구간: %.2f - %.2f\n", 
+              prediction_interval[1,"lwr"], prediction_interval[1,"upr"]))
+
+```

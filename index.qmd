@@ -1,0 +1,78 @@
+---
+title: "태양렬 발전량 예측 자동화"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+# 작업흐름
+
+```{mermaid}
+flowchart TB
+    A[날씨 API] -->|온도 데이터 요청| B(온도 정보 추출)
+    B -->|평균 온도| C{ML 모델}
+    D[(저장된 ML 모델)] -->|모델 로드| C
+    C -->|생산량 예측| E[예측 결과 생성]
+    E -->|예측 데이터| F[이메일 내용 작성]
+    F -->|formatted email| G[SMTP 서버]
+    H[(Gmail 인증 정보)] -->|credentials| G
+    G -->|send email| I[수신자 이메일]
+```
+
+# 프로젝트 구조
+
+```sh
+project_root/
+│
+├── Makefile
+├── data/
+│   └── simple_solar_prediction_model.rds
+├── scripts/
+│   ├── get_weather.R
+│   ├── predict_solar.R
+│   └── send_email.R
+└── output/
+    ├── weather_data.csv
+    ├── temperature.csv
+    └── prediction_result.csv
+```
+
+# Makefile
+
+
+```makefile
+.PHONY: all clean create_dirs
+
+all: send_email
+
+output/weather_data.csv output/temperature.csv: scripts/get_temperature.R
+	Rscript scripts/get_temperature.R
+
+output/prediction_result.csv: scripts/predict_solar.R output/weather_data.csv output/temperature.csv
+	Rscript scripts/predict_solar.R
+
+send_email: scripts/send_email.R output/prediction_result.csv
+	Rscript scripts/send_email.R
+
+clean:
+	rm -f output/weather_data.csv output/temperature.csv output/prediction_result.csv
+```
+
+
+# 실행결과
+
+```sh
+$ make all
+Rscript scripts/get_temperature.R
+Rscript scripts/get_temperature.R
+Rscript scripts/predict_solar.R
+Rscript scripts/send_email.R
+The email message was sent successfully.
+경고메시지(들):
+sprintf("=?utf-8?B?%s?=", base64enc::base64encode(charToRaw(str)), 에서:
+  one argument not used by format '=?utf-8?B?%s?='
+예측 결과가 이메일로 전송되었습니다.
+```
+
+![](images/gmail_solar_report.jpg)

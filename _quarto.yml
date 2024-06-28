@@ -1,0 +1,39 @@
+project:
+  type: website
+  output-dir: docs
+
+lang: ko-kr
+date-format: "YYYY년 MM월 DD일"
+
+website:
+  title: "지바대 사전 워크샵 - `target`"
+  favicon: "images/chiba.webp"
+  google-analytics: "UA-229551680-1"
+  navbar:
+    search: true
+    logo: "images/chiba.webp"
+    left:
+      - text: "날씨 API"
+        file: document/01_weather.qmd
+      - text: "기계학습"
+        file: document/02_ml.qmd
+      - text: "전자우편"
+        file: document/03_email.qmd
+    right: 
+      - href: https://r2bit.com
+        text: "R사용자회"
+      - icon: github
+        href: https://github.com/statkclee/make_power
+
+format:
+  html:
+    theme: cosmo
+    css: custom.css
+    toc: true
+
+theme:
+  light: cosmo
+  dark: [cosmo, theme-dark.scss]
+  
+execute:
+  freeze: false
