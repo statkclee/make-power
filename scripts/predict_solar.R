@@ -4,7 +4,7 @@ library(tidyverse)
 simple_model <- readRDS("data/simple_solar_prediction_model.rds")
 
 # 온도 데이터 읽기
-temperature_data <- read.csv("data/temperature.csv")
+temperature_data <- read.csv("output/temperature.csv")
 temperature <- temperature_data$temperature
 
 # 예측 수행
@@ -20,4 +20,4 @@ prediction_result <- data.frame(
   upper_bound = prediction_interval[, "upr"]
 )
 
-write.csv(prediction_result, "data/prediction_result.csv", row.names = FALSE)
+write.csv(prediction_result, "output/prediction_result.csv", row.names = FALSE)

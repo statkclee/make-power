@@ -2,7 +2,7 @@ library(blastula)
 library(glue)
 
 # 예측 결과 읽기
-prediction_result <- read.csv("data/prediction_result.csv")
+prediction_result <- read.csv("output/prediction_result.csv")
 
 # 이메일 내용 작성
 email_body <- compose_email(

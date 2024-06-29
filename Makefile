@@ -1,4 +1,4 @@
-.PHONY: all clean create_dirs
+.PHONY: all clean create_dirs daily
 
 all: send_email
 
@@ -14,4 +14,5 @@ send_email: scripts/send_email.R output/prediction_result.csv
 clean:
 	rm -f output/weather_data.csv output/temperature.csv output/prediction_result.csv
 
-	
+# 일일 작업을 위한 새로운 타겟
+daily: clean all	

@@ -20,6 +20,8 @@ website:
       - text: "전자우편"
         file: document/03_email.qmd
     right: 
+      - text: "환경설정"
+        file: setup.qmd
       - href: https://r2bit.com
         text: "R사용자회"
       - icon: github
@@ -28,7 +30,6 @@ website:
 format:
   html:
     theme: cosmo
-    css: custom.css
     toc: true
 
 theme:

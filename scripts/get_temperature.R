@@ -3,6 +3,7 @@ library(xml2)
 library(dplyr)
 library(tidyr)
 library(lubridate)
+library(purrr)
 
 service_key <- Sys.getenv("DATA_GO_DECODE_KEY")
 base_date <- format(Sys.Date(), "%Y%m%d")
@@ -40,7 +41,7 @@ forecast_data <- map_df(items, ~{
 forecast_tbl <- forecast_data %>%
   pivot_wider(names_from = category, values_from = fcstValue)
 
-write.csv(forecast_tbl, "data/weather_data.csv", row.names = FALSE)
+write.csv(forecast_tbl, "output/weather_data.csv", row.names = FALSE)
 
 temperature <- forecast_tbl |> 
   mutate(fcstDate = ymd(fcstDate)) |> 
@@ -49,5 +50,5 @@ temperature <- forecast_tbl |>
   summarise(average_temp = mean(TMP)) |> 
   pull(average_temp)
 
-write.csv(data.frame(temperature = temperature), "data/temperature.csv", row.names = FALSE)
+write.csv(data.frame(temperature = temperature), "output/temperature.csv", row.names = FALSE)
 
